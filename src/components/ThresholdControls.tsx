@@ -10,7 +10,7 @@ interface ThresholdsProps {
     loud: number;
     excessive: number;
   };
-  onChange: (key: keyof typeof thresholds, value: number) => void;
+  onChange: (key: 'moderate' | 'loud' | 'excessive', value: number) => void;
   onReset: () => void;
 }
 
