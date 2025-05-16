@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -35,20 +36,19 @@
     --radius: 0.5rem;
 
     --sidebar-background: 0 0% 98%;
-
     --sidebar-foreground: 240 5.3% 26.1%;
-
     --sidebar-primary: 240 5.9% 10%;
-
     --sidebar-primary-foreground: 0 0% 98%;
-
     --sidebar-accent: 240 4.8% 95.9%;
-
     --sidebar-accent-foreground: 240 5.9% 10%;
-
     --sidebar-border: 220 13% 91%;
-
     --sidebar-ring: 217.2 91.2% 59.8%;
+
+    /* Noise level colors */
+    --noise-quiet: 142 76% 36%;       /* Green */
+    --noise-moderate: 41 100% 59%;    /* Yellow */
+    --noise-loud: 23 100% 58%;        /* Orange */
+    --noise-excessive: 0 84% 60%;     /* Red */
   }
 
   .dark {
@@ -87,6 +87,12 @@
     --sidebar-accent-foreground: 240 4.8% 95.9%;
     --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
+    
+    /* Noise level colors - dark mode */
+    --noise-quiet: 142 70% 45%;
+    --noise-moderate: 41 100% 65%;
+    --noise-loud: 23 100% 64%;
+    --noise-excessive: 0 84% 65%;
   }
 }
 
@@ -98,4 +104,21 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* Custom animation for the noise meter */
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.animate-pulse-slow {
+  animation: pulse 2s ease-in-out infinite;
 }
