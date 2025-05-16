@@ -14,20 +14,32 @@ interface NoiseMeterProps {
 
 const NoiseMeter: React.FC<NoiseMeterProps> = ({ level, thresholds }) => {
   const [animatedLevel, setAnimatedLevel] = useState(level);
+  const [lastUpdateTime, setLastUpdateTime] = useState(Date.now());
   
-  // Smooth animation for the meter
+  // Enhanced smooth animation for the meter with faster response time
   useEffect(() => {
+    const now = Date.now();
+    const timeDelta = now - lastUpdateTime;
+    setLastUpdateTime(now);
+    
     // Use animation frames for smoother transitions
     const animateToNewLevel = () => {
       setAnimatedLevel(prev => {
+        // Adjust responsiveness based on direction of level change
+        // Faster response when level increases, smoother when decreases
+        const speed = level > prev ? 0.5 : 0.2;
+        
+        // More responsive when significant changes occur
+        const significance = Math.abs(prev - level) > 15 ? 1.5 : 1;
+        
         if (Math.abs(prev - level) < 0.5) return level;
-        return prev + (level - prev) * 0.3; // Smooth transition
+        return prev + (level - prev) * speed * significance; 
       });
     };
     
     const animationId = requestAnimationFrame(animateToNewLevel);
     return () => cancelAnimationFrame(animationId);
-  }, [level]);
+  }, [level, lastUpdateTime]);
 
   // Determine the appropriate color based on noise level
   const getNoiseColor = () => {
@@ -37,12 +49,20 @@ const NoiseMeter: React.FC<NoiseMeterProps> = ({ level, thresholds }) => {
     return 'bg-green-500';
   };
 
-  // Get appropriate icon
+  // Get appropriate icon with enhanced visual feedback
   const getNoiseIcon = () => {
-    if (level >= thresholds.excessive) return <Volume2 className="text-red-500 animate-pulse h-12 w-12" />;
-    if (level >= thresholds.loud) return <Volume2 className="text-orange-500 h-12 w-12" />;
-    if (level >= thresholds.moderate) return <Volume1 className="text-yellow-500 h-12 w-12" />;
-    if (level > 5) return <Volume className="text-green-600 h-12 w-12" />;
+    if (level >= thresholds.excessive) {
+      return <Volume2 className="text-red-500 animate-pulse h-12 w-12" />;
+    }
+    if (level >= thresholds.loud) {
+      return <Volume2 className="text-orange-500 h-12 w-12" />;
+    }
+    if (level >= thresholds.moderate) {
+      return <Volume1 className="text-yellow-500 h-12 w-12" />;
+    }
+    if (level > 5) {
+      return <Volume className="text-green-600 h-12 w-12" />;
+    }
     return <VolumeX className="text-gray-400 h-12 w-12" />;
   };
 
@@ -51,7 +71,8 @@ const NoiseMeter: React.FC<NoiseMeterProps> = ({ level, thresholds }) => {
     if (level >= thresholds.excessive) return 'Too Loud!';
     if (level >= thresholds.loud) return 'Very Noisy';
     if (level >= thresholds.moderate) return 'Moderate';
-    return 'Quiet';
+    if (level > 5) return 'Quiet';
+    return 'Silent';
   };
 
   return (
@@ -65,7 +86,8 @@ const NoiseMeter: React.FC<NoiseMeterProps> = ({ level, thresholds }) => {
             level >= thresholds.excessive && "text-red-500",
             level >= thresholds.loud && level < thresholds.excessive && "text-orange-500",
             level >= thresholds.moderate && level < thresholds.loud && "text-yellow-500",
-            level < thresholds.moderate && "text-green-600"
+            level > 5 && level < thresholds.moderate && "text-green-600",
+            level <= 5 && "text-gray-400"
           )}>
             {getNoiseLabel()}
           </span>
@@ -77,11 +99,18 @@ const NoiseMeter: React.FC<NoiseMeterProps> = ({ level, thresholds }) => {
         {/* Meter fill */}
         <div
           className={cn(
-            "h-full rounded-full transition-all duration-300",
+            "h-full rounded-full transition-all duration-150",
             getNoiseColor()
           )}
           style={{ width: `${Math.max(0, Math.min(100, animatedLevel))}%` }}
         ></div>
+      </div>
+
+      {/* Visual indicator dots */}
+      <div className="relative h-1 mt-1">
+        <div className="absolute left-1/4 bottom-0 w-1 h-1 bg-yellow-400 rounded-full"></div>
+        <div className="absolute left-1/2 bottom-0 w-1 h-1 bg-orange-500 rounded-full"></div>
+        <div className="absolute left-3/4 bottom-0 w-1 h-1 bg-red-500 rounded-full"></div>
       </div>
 
       {/* Level markers */}

@@ -27,7 +27,10 @@ export function useAudioLevel(): AudioLevelHook {
   // Function to handle starting the audio monitoring
   const startListening = useCallback(async () => {
     try {
+      console.log("Starting audio monitoring...");
+      
       if (!navigator.mediaDevices) {
+        console.error("Media devices not supported in this browser.");
         toast({
           title: "Error",
           description: "Media devices not supported in this browser.",
@@ -39,19 +42,36 @@ export function useAudioLevel(): AudioLevelHook {
       // Create new audio context if we don't have one
       if (!audioContextRef.current) {
         audioContextRef.current = new AudioContext();
+        console.log("AudioContext created:", audioContextRef.current.state);
+        
+        // Resume audio context if it's suspended (needed for some browsers)
+        if (audioContextRef.current.state === 'suspended') {
+          await audioContextRef.current.resume();
+          console.log("AudioContext resumed");
+        }
       }
       
       // Request microphone access
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: { 
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false
+        } 
+      });
       streamRef.current = stream;
+      console.log("Microphone access granted, tracks:", stream.getAudioTracks().length);
       
       const context = audioContextRef.current;
       const source = context.createMediaStreamSource(stream);
       const audioAnalyser = context.createAnalyser();
       
       // Configure the analyser for better sensitivity
-      audioAnalyser.fftSize = 256; // Increased for more data points
-      audioAnalyser.smoothingTimeConstant = 0.5; // Smooths transitions
+      audioAnalyser.fftSize = 1024; // Increased for more data points
+      audioAnalyser.minDecibels = -90; // Increase sensitivity (default is -100)
+      audioAnalyser.maxDecibels = -10; // Upper volume limit (default is -30)
+      audioAnalyser.smoothingTimeConstant = 0.3; // Lower value for quicker response
+      
       source.connect(audioAnalyser);
       
       analyserRef.current = audioAnalyser;
@@ -63,27 +83,34 @@ export function useAudioLevel(): AudioLevelHook {
       
       // Function to update audio level
       const updateAudioLevel = () => {
-        if (!isListening) return;
+        if (!isListening || !analyserRef.current) return;
         
-        if (analyserRef.current) {
-          analyserRef.current.getByteFrequencyData(dataArray);
-          
-          // Calculate average volume level (0-100)
-          // Skip the lowest frequencies (often contain noise)
-          const startIndex = 1;
-          const values = dataArray.slice(startIndex);
-          const sum = values.reduce((acc, val) => acc + val, 0);
-          const average = values.length > 0 ? sum / values.length : 0;
-          
-          // Apply non-linear scaling to make the meter more responsive
-          // Square root curve makes small sounds more noticeable
-          const normalizedLevel = Math.min(
-            100, 
-            Math.max(0, Math.round(Math.sqrt(average / 255) * 100))
-          );
-          
-          setAudioLevel(normalizedLevel);
+        analyserRef.current.getByteFrequencyData(dataArray);
+        
+        // Calculate average volume level (0-255)
+        let sum = 0;
+        let count = 0;
+        
+        // Skip the very lowest frequencies (often background noise)
+        const startIndex = Math.floor(dataArray.length * 0.05);
+        
+        // Focus on the frequency range most relevant to human voice/classroom
+        const endIndex = Math.floor(dataArray.length * 0.8);
+        
+        for (let i = startIndex; i < endIndex; i++) {
+          sum += dataArray[i];
+          count++;
         }
+        
+        const average = count > 0 ? sum / count : 0;
+        
+        // Apply non-linear scaling to make the meter more responsive
+        // with enhanced sensitivity to lower volumes
+        const scaledLevel = Math.pow(average / 255, 0.5) * 100;
+        const normalizedLevel = Math.min(100, Math.max(0, scaledLevel));
+        
+        console.log("Audio level:", Math.round(normalizedLevel));
+        setAudioLevel(normalizedLevel);
         
         // Continue animation loop
         animationFrameRef.current = requestAnimationFrame(updateAudioLevel);
@@ -97,6 +124,8 @@ export function useAudioLevel(): AudioLevelHook {
         description: "Now monitoring classroom noise levels."
       });
       
+      console.log("Audio monitoring started successfully");
+      
     } catch (error) {
       console.error("Error accessing microphone:", error);
       toast({
@@ -109,6 +138,8 @@ export function useAudioLevel(): AudioLevelHook {
 
   // Function to stop listening
   const stopListening = useCallback(() => {
+    console.log("Stopping audio monitoring...");
+    
     // Cancel animation frame if it exists
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
@@ -139,6 +170,8 @@ export function useAudioLevel(): AudioLevelHook {
     
     setIsListening(false);
     setAudioLevel(0);
+    
+    console.log("Audio monitoring stopped");
   }, []);
 
   // Clean up when component unmounts
