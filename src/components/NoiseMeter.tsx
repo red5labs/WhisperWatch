@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { cn } from "@/lib/utils";
 import { Volume, Volume1, Volume2, VolumeX } from "lucide-react";
 
@@ -13,6 +13,22 @@ interface NoiseMeterProps {
 }
 
 const NoiseMeter: React.FC<NoiseMeterProps> = ({ level, thresholds }) => {
+  const [animatedLevel, setAnimatedLevel] = useState(level);
+  
+  // Smooth animation for the meter
+  useEffect(() => {
+    // Use animation frames for smoother transitions
+    const animateToNewLevel = () => {
+      setAnimatedLevel(prev => {
+        if (Math.abs(prev - level) < 0.5) return level;
+        return prev + (level - prev) * 0.3; // Smooth transition
+      });
+    };
+    
+    const animationId = requestAnimationFrame(animateToNewLevel);
+    return () => cancelAnimationFrame(animationId);
+  }, [level]);
+
   // Determine the appropriate color based on noise level
   const getNoiseColor = () => {
     if (level >= thresholds.excessive) return 'bg-red-500';
@@ -64,7 +80,7 @@ const NoiseMeter: React.FC<NoiseMeterProps> = ({ level, thresholds }) => {
             "h-full rounded-full transition-all duration-300",
             getNoiseColor()
           )}
-          style={{ width: `${level}%` }}
+          style={{ width: `${Math.max(0, Math.min(100, animatedLevel))}%` }}
         ></div>
       </div>
 
@@ -79,7 +95,7 @@ const NoiseMeter: React.FC<NoiseMeterProps> = ({ level, thresholds }) => {
 
       {/* Current level display */}
       <div className="text-center mt-2">
-        <span className="text-2xl font-bold">{level}</span>
+        <span className="text-2xl font-bold">{Math.round(level)}</span>
         <span className="text-gray-500 ml-1">/ 100</span>
       </div>
     </div>
