@@ -23,6 +23,9 @@ export function useAudioLevel(): AudioLevelHook {
   
   // Animation frame reference for cleanup
   const animationFrameRef = useRef<number | null>(null);
+  
+  // Sensitivity multiplier - can be exposed as a parameter if needed
+  const sensitivityMultiplier = 5; // Adjust this value based on testing
 
   // Function to handle starting the audio monitoring
   const startListening = useCallback(async () => {
@@ -53,11 +56,7 @@ export function useAudioLevel(): AudioLevelHook {
       
       // Request microphone access
       const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: { 
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false
-        } 
+        audio: true
       });
       streamRef.current = stream;
       console.log("Microphone access granted, tracks:", stream.getAudioTracks().length);
@@ -66,11 +65,8 @@ export function useAudioLevel(): AudioLevelHook {
       const source = context.createMediaStreamSource(stream);
       const audioAnalyser = context.createAnalyser();
       
-      // Configure the analyser for better sensitivity
-      audioAnalyser.fftSize = 1024; // Increased for more data points
-      audioAnalyser.minDecibels = -90; // Increase sensitivity (default is -100)
-      audioAnalyser.maxDecibels = -10; // Upper volume limit (default is -30)
-      audioAnalyser.smoothingTimeConstant = 0.3; // Lower value for quicker response
+      // Configure the analyser
+      audioAnalyser.fftSize = 1024;
       
       source.connect(audioAnalyser);
       
@@ -78,39 +74,32 @@ export function useAudioLevel(): AudioLevelHook {
       microphoneRef.current = source;
       setIsListening(true);
       
-      // Prepare data array for frequency data
-      const dataArray = new Uint8Array(audioAnalyser.frequencyBinCount);
+      // Prepare data array for time domain data (waveform)
+      const dataArray = new Uint8Array(audioAnalyser.fftSize);
       
-      // Function to update audio level
+      // Function to update audio level using the same approach as the working script
       const updateAudioLevel = () => {
         if (!isListening || !analyserRef.current) return;
         
-        analyserRef.current.getByteFrequencyData(dataArray);
+        // Use getByteTimeDomainData instead of getByteFrequencyData
+        analyserRef.current.getByteTimeDomainData(dataArray);
         
-        // Calculate average volume level (0-255)
+        // Calculate RMS (Root Mean Square) of the audio signal
         let sum = 0;
-        let count = 0;
-        
-        // Skip the very lowest frequencies (often background noise)
-        const startIndex = Math.floor(dataArray.length * 0.05);
-        
-        // Focus on the frequency range most relevant to human voice/classroom
-        const endIndex = Math.floor(dataArray.length * 0.8);
-        
-        for (let i = startIndex; i < endIndex; i++) {
-          sum += dataArray[i];
-          count++;
+        for (let i = 0; i < dataArray.length; i++) {
+          // Deviation from the center (128)
+          const deviation = dataArray[i] - 128;
+          sum += deviation * deviation;
         }
         
-        const average = count > 0 ? sum / count : 0;
+        // RMS calculation - square root of the average
+        const volume = Math.sqrt(sum / dataArray.length);
         
-        // Apply non-linear scaling to make the meter more responsive
-        // with enhanced sensitivity to lower volumes
-        const scaledLevel = Math.pow(average / 255, 0.5) * 100;
-        const normalizedLevel = Math.min(100, Math.max(0, scaledLevel));
+        // Apply sensitivity multiplier and clamp to 0-100 range
+        const adjustedVolume = Math.min(100, volume * sensitivityMultiplier);
         
-        console.log("Audio level:", Math.round(normalizedLevel));
-        setAudioLevel(normalizedLevel);
+        console.log("Audio level:", Math.round(adjustedVolume));
+        setAudioLevel(adjustedVolume);
         
         // Continue animation loop
         animationFrameRef.current = requestAnimationFrame(updateAudioLevel);
@@ -134,7 +123,7 @@ export function useAudioLevel(): AudioLevelHook {
         variant: "destructive",
       });
     }
-  }, [isListening, toast]);
+  }, [isListening, toast, sensitivityMultiplier]);
 
   // Function to stop listening
   const stopListening = useCallback(() => {

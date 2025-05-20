@@ -14,32 +14,28 @@ interface NoiseMeterProps {
 
 const NoiseMeter: React.FC<NoiseMeterProps> = ({ level, thresholds }) => {
   const [animatedLevel, setAnimatedLevel] = useState(level);
-  const [lastUpdateTime, setLastUpdateTime] = useState(Date.now());
   
-  // Enhanced smooth animation for the meter with faster response time
+  // More responsive animation for the meter
   useEffect(() => {
-    const now = Date.now();
-    const timeDelta = now - lastUpdateTime;
-    setLastUpdateTime(now);
-    
     // Use animation frames for smoother transitions
     const animateToNewLevel = () => {
       setAnimatedLevel(prev => {
-        // Adjust responsiveness based on direction of level change
-        // Faster response when level increases, smoother when decreases
-        const speed = level > prev ? 0.5 : 0.2;
+        // Faster response for all changes
+        const speed = 0.3; 
         
-        // More responsive when significant changes occur
-        const significance = Math.abs(prev - level) > 15 ? 1.5 : 1;
+        // When there's a significant jump, move faster
+        const significance = Math.abs(prev - level) > 20 ? 2.0 : 1;
         
+        // If we're very close to target, just snap to it
         if (Math.abs(prev - level) < 0.5) return level;
+        
         return prev + (level - prev) * speed * significance; 
       });
     };
     
     const animationId = requestAnimationFrame(animateToNewLevel);
     return () => cancelAnimationFrame(animationId);
-  }, [level, lastUpdateTime]);
+  }, [level]);
 
   // Determine the appropriate color based on noise level
   const getNoiseColor = () => {
@@ -75,6 +71,12 @@ const NoiseMeter: React.FC<NoiseMeterProps> = ({ level, thresholds }) => {
     return 'Silent';
   };
 
+  // Calculate meter width with additional visual smoothing
+  const getMeterWidth = () => {
+    // Ensure the value is between 0 and 100
+    return `${Math.max(0, Math.min(100, animatedLevel))}%`;
+  };
+
   return (
     <div className="w-full max-w-md mx-auto">
       <div className="flex items-center justify-between mb-2">
@@ -99,10 +101,10 @@ const NoiseMeter: React.FC<NoiseMeterProps> = ({ level, thresholds }) => {
         {/* Meter fill */}
         <div
           className={cn(
-            "h-full rounded-full transition-all duration-150",
+            "h-full rounded-full transition-all duration-75", // Faster transition
             getNoiseColor()
           )}
-          style={{ width: `${Math.max(0, Math.min(100, animatedLevel))}%` }}
+          style={{ width: getMeterWidth() }}
         ></div>
       </div>
 
