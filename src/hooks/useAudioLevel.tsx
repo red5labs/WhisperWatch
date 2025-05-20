@@ -22,8 +22,8 @@ export function useAudioLevel(): AudioLevelHook {
   const streamRef = useRef<MediaStream | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   
-  // Sensitivity multiplier - increase this value to make it more sensitive
-  const sensitivityMultiplier = 10; // Increased from 5 to 10
+  // Sensitivity multiplier - adjustable
+  const sensitivityMultiplier = 25; // Increased significantly based on your working example
 
   // Function to handle starting the audio monitoring
   const startListening = useCallback(async () => {
@@ -44,22 +44,16 @@ export function useAudioLevel(): AudioLevelHook {
       if (!audioContextRef.current) {
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
         console.log("AudioContext created:", audioContextRef.current.state);
-        
-        // Resume audio context if it's suspended (needed for some browsers)
-        if (audioContextRef.current.state === 'suspended') {
-          await audioContextRef.current.resume();
-          console.log("AudioContext resumed");
-        }
       }
       
-      // Request microphone access
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: {
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false
-        } 
-      });
+      // Resume audio context if it's suspended (needed for some browsers)
+      if (audioContextRef.current.state === 'suspended') {
+        await audioContextRef.current.resume();
+        console.log("AudioContext resumed");
+      }
+      
+      // Request microphone access - simplify options to match working example
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       
       streamRef.current = stream;
       console.log("Microphone access granted, tracks:", stream.getAudioTracks().length);
@@ -69,9 +63,8 @@ export function useAudioLevel(): AudioLevelHook {
       const source = context.createMediaStreamSource(stream);
       const audioAnalyser = context.createAnalyser();
       
-      // Configure the analyser - use a smaller FFT size for faster response
-      audioAnalyser.fftSize = 512; // Smaller for faster processing
-      audioAnalyser.smoothingTimeConstant = 0.2; // Less smoothing for quicker response
+      // Use exactly the same FFT size as the working example
+      audioAnalyser.fftSize = 256; 
       
       source.connect(audioAnalyser);
       
@@ -84,7 +77,7 @@ export function useAudioLevel(): AudioLevelHook {
       
       console.log("Audio processing configured, beginning monitoring loop");
       
-      // Function to update audio level using the same approach as the working script
+      // Function to update audio level - simplified to match your working example exactly
       const updateAudioLevel = () => {
         if (!analyserRef.current) {
           console.warn("Analyzer not available");
@@ -94,25 +87,22 @@ export function useAudioLevel(): AudioLevelHook {
         // Use getByteTimeDomainData as in your working example
         analyserRef.current.getByteTimeDomainData(dataArray);
         
-        // Calculate RMS (Root Mean Square) of the audio signal
+        // Calculate volume exactly like your working example
         let sum = 0;
         for (let i = 0; i < dataArray.length; i++) {
-          // Deviation from the center (128)
-          const deviation = dataArray[i] - 128;
+          let deviation = dataArray[i] - 128;
           sum += deviation * deviation;
         }
         
-        // RMS calculation - square root of the average
         const volume = Math.sqrt(sum / dataArray.length);
         
         // Apply sensitivity multiplier and clamp to 0-100 range
         const adjustedVolume = Math.min(100, volume * sensitivityMultiplier);
         
-        // Log every few frames to avoid flooding console
-        if (Math.random() < 0.05) { // Log roughly 5% of frames
+        // Log occasional samples to debug
+        if (Math.random() < 0.01) { 
           console.log("Raw volume:", volume.toFixed(2), "Adjusted:", adjustedVolume.toFixed(2));
-          // Log some sample values from the array to verify we're getting data
-          console.log("Sample values:", dataArray.slice(0, 5));
+          console.log("Sample values:", Array.from(dataArray.slice(0, 10)));
         }
         
         setAudioLevel(adjustedVolume);
@@ -166,8 +156,8 @@ export function useAudioLevel(): AudioLevelHook {
     
     // Close audio context
     if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
-      audioContextRef.current.close();
-      audioContextRef.current = null;
+      // Just suspend rather than close to allow quick restart
+      audioContextRef.current.suspend();
     }
     
     analyserRef.current = null;

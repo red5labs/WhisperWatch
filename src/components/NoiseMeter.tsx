@@ -21,10 +21,10 @@ const NoiseMeter: React.FC<NoiseMeterProps> = ({ level, thresholds }) => {
     const animateToNewLevel = () => {
       setAnimatedLevel(prev => {
         // Very fast response to make sure we see changes immediately
-        const speed = 0.5;
+        const speed = 0.8;
         
         // When there's a significant jump, move faster
-        const significance = Math.abs(prev - level) > 20 ? 3.0 : 1.5;
+        const significance = Math.abs(prev - level) > 20 ? 5.0 : 2.0;
         
         // If we're very close to target, just snap to it
         if (Math.abs(prev - level) < 0.5) return level;
@@ -39,9 +39,7 @@ const NoiseMeter: React.FC<NoiseMeterProps> = ({ level, thresholds }) => {
 
   // Log level changes for debugging
   useEffect(() => {
-    if (level > 1) {
-      console.log("NoiseMeter receiving level:", level);
-    }
+    console.log("NoiseMeter receiving level:", level);
   }, [level]);
 
   // Determine the appropriate color based on noise level
