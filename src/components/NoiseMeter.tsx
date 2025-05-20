@@ -20,11 +20,11 @@ const NoiseMeter: React.FC<NoiseMeterProps> = ({ level, thresholds }) => {
     // Use animation frames for smoother transitions
     const animateToNewLevel = () => {
       setAnimatedLevel(prev => {
-        // Faster response for all changes
-        const speed = 0.3; 
+        // Very fast response to make sure we see changes immediately
+        const speed = 0.5;
         
         // When there's a significant jump, move faster
-        const significance = Math.abs(prev - level) > 20 ? 2.0 : 1;
+        const significance = Math.abs(prev - level) > 20 ? 3.0 : 1.5;
         
         // If we're very close to target, just snap to it
         if (Math.abs(prev - level) < 0.5) return level;
@@ -35,6 +35,13 @@ const NoiseMeter: React.FC<NoiseMeterProps> = ({ level, thresholds }) => {
     
     const animationId = requestAnimationFrame(animateToNewLevel);
     return () => cancelAnimationFrame(animationId);
+  }, [level]);
+
+  // Log level changes for debugging
+  useEffect(() => {
+    if (level > 1) {
+      console.log("NoiseMeter receiving level:", level);
+    }
   }, [level]);
 
   // Determine the appropriate color based on noise level
@@ -91,7 +98,7 @@ const NoiseMeter: React.FC<NoiseMeterProps> = ({ level, thresholds }) => {
             level > 5 && level < thresholds.moderate && "text-green-600",
             level <= 5 && "text-gray-400"
           )}>
-            {getNoiseLabel()}
+            {getNoiseLabel()} {Math.round(level)}
           </span>
         </div>
       </div>
@@ -101,7 +108,7 @@ const NoiseMeter: React.FC<NoiseMeterProps> = ({ level, thresholds }) => {
         {/* Meter fill */}
         <div
           className={cn(
-            "h-full rounded-full transition-all duration-75", // Faster transition
+            "h-full rounded-full transition-all duration-50", // Even faster transition
             getNoiseColor()
           )}
           style={{ width: getMeterWidth() }}

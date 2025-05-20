@@ -20,12 +20,10 @@ export function useAudioLevel(): AudioLevelHook {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const microphoneRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  
-  // Animation frame reference for cleanup
   const animationFrameRef = useRef<number | null>(null);
   
-  // Sensitivity multiplier - can be exposed as a parameter if needed
-  const sensitivityMultiplier = 5; // Adjust this value based on testing
+  // Sensitivity multiplier - increase this value to make it more sensitive
+  const sensitivityMultiplier = 10; // Increased from 5 to 10
 
   // Function to handle starting the audio monitoring
   const startListening = useCallback(async () => {
@@ -44,7 +42,7 @@ export function useAudioLevel(): AudioLevelHook {
 
       // Create new audio context if we don't have one
       if (!audioContextRef.current) {
-        audioContextRef.current = new AudioContext();
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
         console.log("AudioContext created:", audioContextRef.current.state);
         
         // Resume audio context if it's suspended (needed for some browsers)
@@ -56,17 +54,24 @@ export function useAudioLevel(): AudioLevelHook {
       
       // Request microphone access
       const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: true
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false
+        } 
       });
+      
       streamRef.current = stream;
       console.log("Microphone access granted, tracks:", stream.getAudioTracks().length);
+      console.log("Audio track settings:", stream.getAudioTracks()[0].getSettings());
       
       const context = audioContextRef.current;
       const source = context.createMediaStreamSource(stream);
       const audioAnalyser = context.createAnalyser();
       
-      // Configure the analyser
-      audioAnalyser.fftSize = 1024;
+      // Configure the analyser - use a smaller FFT size for faster response
+      audioAnalyser.fftSize = 512; // Smaller for faster processing
+      audioAnalyser.smoothingTimeConstant = 0.2; // Less smoothing for quicker response
       
       source.connect(audioAnalyser);
       
@@ -77,11 +82,16 @@ export function useAudioLevel(): AudioLevelHook {
       // Prepare data array for time domain data (waveform)
       const dataArray = new Uint8Array(audioAnalyser.fftSize);
       
+      console.log("Audio processing configured, beginning monitoring loop");
+      
       // Function to update audio level using the same approach as the working script
       const updateAudioLevel = () => {
-        if (!isListening || !analyserRef.current) return;
+        if (!analyserRef.current) {
+          console.warn("Analyzer not available");
+          return;
+        }
         
-        // Use getByteTimeDomainData instead of getByteFrequencyData
+        // Use getByteTimeDomainData as in your working example
         analyserRef.current.getByteTimeDomainData(dataArray);
         
         // Calculate RMS (Root Mean Square) of the audio signal
@@ -98,11 +108,19 @@ export function useAudioLevel(): AudioLevelHook {
         // Apply sensitivity multiplier and clamp to 0-100 range
         const adjustedVolume = Math.min(100, volume * sensitivityMultiplier);
         
-        console.log("Audio level:", Math.round(adjustedVolume));
+        // Log every few frames to avoid flooding console
+        if (Math.random() < 0.05) { // Log roughly 5% of frames
+          console.log("Raw volume:", volume.toFixed(2), "Adjusted:", adjustedVolume.toFixed(2));
+          // Log some sample values from the array to verify we're getting data
+          console.log("Sample values:", dataArray.slice(0, 5));
+        }
+        
         setAudioLevel(adjustedVolume);
         
-        // Continue animation loop
-        animationFrameRef.current = requestAnimationFrame(updateAudioLevel);
+        // Continue animation loop if still listening
+        if (isListening) {
+          animationFrameRef.current = requestAnimationFrame(updateAudioLevel);
+        }
       };
       
       // Start animation loop
@@ -112,8 +130,6 @@ export function useAudioLevel(): AudioLevelHook {
         title: "Microphone Access Granted",
         description: "Now monitoring classroom noise levels."
       });
-      
-      console.log("Audio monitoring started successfully");
       
     } catch (error) {
       console.error("Error accessing microphone:", error);
