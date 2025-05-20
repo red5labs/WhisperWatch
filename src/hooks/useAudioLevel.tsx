@@ -22,8 +22,8 @@ export function useAudioLevel(): AudioLevelHook {
   const streamRef = useRef<MediaStream | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   
-  // Sensitivity multiplier - adjustable
-  const sensitivityMultiplier = 25; // Increased significantly based on your working example
+  // Increased sensitivity significantly
+  const sensitivityMultiplier = 50; 
 
   // Function to handle starting the audio monitoring
   const startListening = useCallback(async () => {
@@ -52,8 +52,14 @@ export function useAudioLevel(): AudioLevelHook {
         console.log("AudioContext resumed");
       }
       
-      // Request microphone access - simplify options to match working example
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Request microphone access - with minimal constraints
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false
+        } 
+      });
       
       streamRef.current = stream;
       console.log("Microphone access granted, tracks:", stream.getAudioTracks().length);
@@ -63,7 +69,7 @@ export function useAudioLevel(): AudioLevelHook {
       const source = context.createMediaStreamSource(stream);
       const audioAnalyser = context.createAnalyser();
       
-      // Use exactly the same FFT size as the working example
+      // Smaller FFT size for faster updates
       audioAnalyser.fftSize = 256; 
       
       source.connect(audioAnalyser);
@@ -77,33 +83,41 @@ export function useAudioLevel(): AudioLevelHook {
       
       console.log("Audio processing configured, beginning monitoring loop");
       
-      // Function to update audio level - simplified to match your working example exactly
+      // Function to update audio level
       const updateAudioLevel = () => {
         if (!analyserRef.current) {
           console.warn("Analyzer not available");
           return;
         }
         
-        // Use getByteTimeDomainData as in your working example
+        // Get time-domain data
         analyserRef.current.getByteTimeDomainData(dataArray);
         
-        // Calculate volume exactly like your working example
+        // Calculate volume using RMS (Root Mean Square)
         let sum = 0;
         for (let i = 0; i < dataArray.length; i++) {
-          let deviation = dataArray[i] - 128;
+          // For time domain data, we measure deviation from the center value (128)
+          const deviation = dataArray[i] - 128;
           sum += deviation * deviation;
         }
         
+        // Calculate RMS value
         const volume = Math.sqrt(sum / dataArray.length);
         
         // Apply sensitivity multiplier and clamp to 0-100 range
-        const adjustedVolume = Math.min(100, volume * sensitivityMultiplier);
+        const adjustedVolume = Math.min(100, Math.max(0, volume * sensitivityMultiplier));
         
-        // Log occasional samples to debug
-        if (Math.random() < 0.01) { 
+        // Log samples periodically for debugging
+        if (Math.random() < 0.01) {
           console.log("Raw volume:", volume.toFixed(2), "Adjusted:", adjustedVolume.toFixed(2));
-          console.log("Sample values:", Array.from(dataArray.slice(0, 10)));
+          console.log("Sample values (first 10):", Array.from(dataArray.slice(0, 10)));
+          console.log("Sample statistics - Min:", Math.min(...Array.from(dataArray)), 
+                      "Max:", Math.max(...Array.from(dataArray)), 
+                      "Mean:", dataArray.reduce((a, b) => a + b, 0) / dataArray.length);
         }
+        
+        // Log every update for debugging
+        console.log(`Audio level: ${adjustedVolume.toFixed(2)}`);
         
         setAudioLevel(adjustedVolume);
         

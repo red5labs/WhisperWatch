@@ -21,10 +21,10 @@ const NoiseMeter: React.FC<NoiseMeterProps> = ({ level, thresholds }) => {
     const animateToNewLevel = () => {
       setAnimatedLevel(prev => {
         // Very fast response to make sure we see changes immediately
-        const speed = 0.8;
+        const speed = 0.9;
         
         // When there's a significant jump, move faster
-        const significance = Math.abs(prev - level) > 20 ? 5.0 : 2.0;
+        const significance = Math.abs(prev - level) > 10 ? 10.0 : 5.0;
         
         // If we're very close to target, just snap to it
         if (Math.abs(prev - level) < 0.5) return level;
@@ -106,7 +106,7 @@ const NoiseMeter: React.FC<NoiseMeterProps> = ({ level, thresholds }) => {
         {/* Meter fill */}
         <div
           className={cn(
-            "h-full rounded-full transition-all duration-50", // Even faster transition
+            "h-full rounded-full transition-all duration-25", // Even faster transition
             getNoiseColor()
           )}
           style={{ width: getMeterWidth() }}
@@ -133,6 +133,13 @@ const NoiseMeter: React.FC<NoiseMeterProps> = ({ level, thresholds }) => {
       <div className="text-center mt-2">
         <span className="text-2xl font-bold">{Math.round(level)}</span>
         <span className="text-gray-500 ml-1">/ 100</span>
+      </div>
+
+      {/* Debug info */}
+      <div className="mt-4 p-2 bg-gray-100 rounded text-sm">
+        <p>Debug: Raw Level = {level.toFixed(2)}</p>
+        <p>Animated Level = {animatedLevel.toFixed(2)}</p>
+        <p>Microphone Status: {level > 0 ? "Active" : "Silent or Issue Detected"}</p>
       </div>
     </div>
   );
