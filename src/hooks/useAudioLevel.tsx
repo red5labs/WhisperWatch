@@ -5,6 +5,7 @@ import { useToast } from "@/components/ui/use-toast";
 interface AudioLevelHook {
   audioLevel: number;
   isListening: boolean;
+  permissionState: "prompt" | "granted" | "denied" | "unknown";
   startListening: () => void;
   stopListening: () => void;
 }
@@ -12,6 +13,7 @@ interface AudioLevelHook {
 export function useAudioLevel(): AudioLevelHook {
   const [audioLevel, setAudioLevel] = useState<number>(0);
   const [isListening, setIsListening] = useState<boolean>(false);
+  const [permissionState, setPermissionState] = useState<"prompt" | "granted" | "denied" | "unknown">("unknown");
   const { toast } = useToast();
   
   // Using refs to store audio objects to prevent recreation on renders
@@ -21,14 +23,41 @@ export function useAudioLevel(): AudioLevelHook {
   const streamRef = useRef<MediaStream | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   
-  // Drastically increased sensitivity - elementary classrooms need high sensitivity
-  const sensitivityMultiplier = 200; 
+  // Extremely high sensitivity for classroom settings
+  const sensitivityMultiplier = 300;
+  
+  // Check microphone permission status on mount
+  useEffect(() => {
+    const checkPermission = async () => {
+      try {
+        // Check if we can access permissions API
+        if (navigator.permissions) {
+          const permissionStatus = await navigator.permissions.query({ name: 'microphone' as PermissionName });
+          console.log("Initial microphone permission status:", permissionStatus.state);
+          setPermissionState(permissionStatus.state as "prompt" | "granted" | "denied");
+          
+          // Listen for permission changes
+          permissionStatus.addEventListener('change', () => {
+            console.log("Microphone permission changed to:", permissionStatus.state);
+            setPermissionState(permissionStatus.state as "prompt" | "granted" | "denied");
+          });
+        } else {
+          console.log("Permissions API not available, will request directly.");
+        }
+      } catch (err) {
+        console.warn("Could not check permission state:", err);
+      }
+    };
+    
+    checkPermission();
+  }, []);
 
   // Function to handle starting the audio monitoring
   const startListening = useCallback(async () => {
     try {
-      console.log("Starting audio monitoring with enhanced sensitivity...");
+      console.log("Starting audio monitoring...");
       
+      // First, check if media devices are supported
       if (!navigator.mediaDevices) {
         console.error("Media devices not supported in this browser.");
         toast({
@@ -38,123 +67,152 @@ export function useAudioLevel(): AudioLevelHook {
         });
         return;
       }
-
-      // Create new audio context if we don't have one
+      
+      // Create or resume audio context 
       if (!audioContextRef.current) {
+        console.log("Creating new AudioContext");
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-        console.log("AudioContext created:", audioContextRef.current.state);
       }
       
-      // Resume audio context if it's suspended
       if (audioContextRef.current.state === 'suspended') {
+        console.log("Resuming suspended AudioContext");
         await audioContextRef.current.resume();
-        console.log("AudioContext resumed");
       }
       
-      // Request microphone access with minimal constraints for maximum compatibility
-      const stream = await navigator.mediaDevices.getUserMedia({ 
+      console.log("AudioContext state:", audioContextRef.current.state);
+      
+      // Explicitly request microphone with a user gesture
+      console.log("Requesting microphone access...");
+      navigator.mediaDevices.getUserMedia({ 
         audio: {
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false
+          echoCancellation: false,  // Disable echo cancellation for better sensitivity
+          noiseSuppression: false,  // Disable noise suppression for better detection
+          autoGainControl: false,   // Disable auto gain for consistent levels
         } 
-      });
-      
-      streamRef.current = stream;
-      console.log("Microphone access granted, tracks:", stream.getAudioTracks().length);
-      console.log("Audio track settings:", stream.getAudioTracks()[0].getSettings());
-      console.log("Audio track constraints:", stream.getAudioTracks()[0].getConstraints());
-      
-      const context = audioContextRef.current;
-      const source = context.createMediaStreamSource(stream);
-      const audioAnalyser = context.createAnalyser();
-      
-      // Use smaller FFT size for faster updates
-      audioAnalyser.fftSize = 256; 
-      audioAnalyser.smoothingTimeConstant = 0.2; // Less smoothing for more responsive readings
-      
-      source.connect(audioAnalyser);
-      
-      analyserRef.current = audioAnalyser;
-      microphoneRef.current = source;
-      setIsListening(true);
-      
-      // Prepare time domain data array (waveform)
-      const dataArray = new Uint8Array(audioAnalyser.fftSize);
-      
-      // Prepare frequency data array
-      const frequencyData = new Uint8Array(audioAnalyser.frequencyBinCount);
-      
-      console.log("Audio processing configured, beginning monitoring loop");
-      
-      // Function to update audio level
-      const updateAudioLevel = () => {
-        if (!analyserRef.current) {
-          console.warn("Analyzer not available");
-          return;
+      }).then((stream) => {
+        console.log("Microphone access explicitly granted!");
+        setPermissionState("granted");
+        
+        // Store the stream reference
+        streamRef.current = stream;
+        
+        // Log tracks for debugging
+        console.log("Audio tracks obtained:", stream.getAudioTracks().length);
+        const audioTrack = stream.getAudioTracks()[0];
+        console.log("Audio track settings:", audioTrack.getSettings());
+        console.log("Audio track enabled:", audioTrack.enabled);
+        console.log("Audio track readyState:", audioTrack.readyState);
+        
+        // Check if track is actually live and enabled
+        if (!audioTrack.enabled) {
+          console.warn("Audio track is not enabled!");
+          audioTrack.enabled = true;
         }
         
-        // Get time-domain data (waveform)
-        analyserRef.current.getByteTimeDomainData(dataArray);
+        // Create audio processor
+        const context = audioContextRef.current!;
+        const source = context.createMediaStreamSource(stream);
+        const audioAnalyser = context.createAnalyser();
         
-        // Also get frequency data for better detection
-        analyserRef.current.getByteFrequencyData(frequencyData);
+        // Fine-tune analyzer for more sensitivity
+        audioAnalyser.fftSize = 256; // Smaller for faster updates
+        audioAnalyser.smoothingTimeConstant = 0.1; // Less smoothing for responsive readings
+        audioAnalyser.minDecibels = -90; // More sensitive to quiet sounds
+        audioAnalyser.maxDecibels = -10; // Still cap loud sounds
         
-        // Calculate RMS volume from time domain data
-        let sumSquares = 0;
-        for (let i = 0; i < dataArray.length; i++) {
-          // Convert 0-255 value to -128 to 127 range
-          const amplitude = dataArray[i] - 128;
-          sumSquares += amplitude * amplitude;
-        }
-        const rmsVolume = Math.sqrt(sumSquares / dataArray.length);
+        source.connect(audioAnalyser);
         
-        // Calculate average frequency energy
-        const avgFrequency = frequencyData.reduce((sum, value) => sum + value, 0) / frequencyData.length;
+        // Store references
+        analyserRef.current = audioAnalyser;
+        microphoneRef.current = source;
+        setIsListening(true);
         
-        // Combine both metrics with weighted average - frequency data helps catch vocals better
-        const combinedVolume = (rmsVolume * 0.7) + (avgFrequency * 0.3);
+        // Prepare data arrays
+        const dataArray = new Uint8Array(audioAnalyser.fftSize);
+        const frequencyData = new Uint8Array(audioAnalyser.frequencyBinCount);
         
-        // Apply sensitivity multiplier and clamp to 0-100 range
-        const adjustedVolume = Math.min(100, Math.max(0, combinedVolume * sensitivityMultiplier));
+        console.log("Audio processing configured with high sensitivity");
         
-        // Log samples periodically for debugging
-        if (Math.random() < 0.01) {
-          console.log("Raw RMS:", rmsVolume.toFixed(2), 
-                      "Freq avg:", avgFrequency.toFixed(2), 
-                      "Combined:", combinedVolume.toFixed(2), 
-                      "Adjusted:", adjustedVolume.toFixed(2));
-                      
-          console.log("Sample time values (first 10):", Array.from(dataArray.slice(0, 10)));
-          console.log("Sample frequency values (first 10):", Array.from(frequencyData.slice(0, 10)));
+        // Function to update audio level - with extensive debugging
+        const updateAudioLevel = () => {
+          if (!analyserRef.current) return;
           
-          // Detailed audio stats
-          console.log("Audio stats - Min frequency:", Math.min(...Array.from(frequencyData)), 
-                      "Max frequency:", Math.max(...Array.from(frequencyData)), 
-                      "Silent?", Math.max(...Array.from(frequencyData)) < 5);
-        }
+          // Get time-domain data (waveform)
+          analyserRef.current.getByteTimeDomainData(dataArray);
+          
+          // Get frequency data
+          analyserRef.current.getByteFrequencyData(frequencyData);
+          
+          // Calculate RMS volume from time domain data
+          let sumSquares = 0;
+          for (let i = 0; i < dataArray.length; i++) {
+            const amplitude = dataArray[i] - 128;  // Convert to signed value
+            sumSquares += amplitude * amplitude;
+          }
+          const rmsVolume = Math.sqrt(sumSquares / dataArray.length);
+          
+          // Calculate average frequency energy 
+          const avgFrequency = frequencyData.reduce((sum, value) => sum + value, 0) / frequencyData.length;
+          
+          // Calculate peak values for both
+          const peakWaveform = Math.max(...Array.from(dataArray).map(v => Math.abs(v - 128)));
+          const peakFrequency = Math.max(...Array.from(frequencyData));
+          
+          // Combined metric with emphasis on peaks, which helps detect short sounds
+          const combinedVolume = (rmsVolume * 0.5) + (avgFrequency * 0.3) + (peakFrequency * 0.2);
+          
+          // Apply sensitivity multiplier and clamp
+          const adjustedVolume = Math.min(100, Math.max(0, combinedVolume * sensitivityMultiplier));
+          
+          // Log values at reduced frequency for debugging
+          if (Math.random() < 0.01) {
+            console.log("Audio metrics:", {
+              rms: rmsVolume.toFixed(2),
+              avgFreq: avgFrequency.toFixed(2), 
+              peakWave: peakWaveform,
+              peakFreq: peakFrequency,
+              combined: combinedVolume.toFixed(2),
+              adjusted: adjustedVolume.toFixed(2)
+            });
+            
+            // Check if we're getting any data at all
+            console.log("Raw time samples:", dataArray.slice(0, 5));
+            console.log("Raw frequency samples:", frequencyData.slice(0, 5));
+            console.log("Any audio detected:", peakFrequency > 0 || peakWaveform > 0);
+          }
+          
+          setAudioLevel(adjustedVolume);
+          
+          // Continue the animation loop if still listening
+          if (isListening) {
+            animationFrameRef.current = requestAnimationFrame(updateAudioLevel);
+          }
+        };
         
-        setAudioLevel(adjustedVolume);
+        // Start the analysis loop
+        animationFrameRef.current = requestAnimationFrame(updateAudioLevel);
         
-        // Continue animation loop if still listening
-        if (isListening) {
-          animationFrameRef.current = requestAnimationFrame(updateAudioLevel);
-        }
-      };
-      
-      // Start animation loop
-      animationFrameRef.current = requestAnimationFrame(updateAudioLevel);
-      
-      toast({
-        title: "Microphone is listening!",
-        description: "Now watching classroom noise levels.",
+        toast({
+          title: "Microphone connected! 🎤",
+          description: "Now monitoring classroom noise levels.",
+        });
+        
+      }).catch((error) => {
+        console.error("Error accessing microphone:", error);
+        setPermissionState("denied");
+        
+        toast({
+          title: "Microphone Access Needed",
+          description: "Please allow microphone access to use the noise monitor.",
+          variant: "destructive",
+        });
       });
       
     } catch (error) {
-      console.error("Error accessing microphone:", error);
+      console.error("Error in startListening:", error);
       toast({
-        title: "Need microphone access",
-        description: "Please allow microphone access to use the noise monitor.",
+        title: "Something went wrong",
+        description: "Could not start the microphone. Please try again.",
         variant: "destructive",
       });
     }
@@ -164,13 +222,13 @@ export function useAudioLevel(): AudioLevelHook {
   const stopListening = useCallback(() => {
     console.log("Stopping audio monitoring...");
     
-    // Cancel animation frame if it exists
+    // Cancel animation frame
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
       animationFrameRef.current = null;
     }
     
-    // Disconnect and clean up audio sources
+    // Disconnect audio processing
     if (microphoneRef.current) {
       microphoneRef.current.disconnect();
     }
@@ -179,16 +237,19 @@ export function useAudioLevel(): AudioLevelHook {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => {
         track.stop();
+        console.log("Audio track stopped");
       });
       streamRef.current = null;
     }
     
-    // Close audio context
-    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
-      // Just suspend rather than close to allow quick restart
-      audioContextRef.current.suspend();
+    // Suspend audio context
+    if (audioContextRef.current) {
+      audioContextRef.current.suspend().then(() => {
+        console.log("AudioContext suspended");
+      });
     }
     
+    // Clear references
     analyserRef.current = null;
     microphoneRef.current = null;
     
@@ -207,5 +268,5 @@ export function useAudioLevel(): AudioLevelHook {
     };
   }, [isListening, stopListening]);
 
-  return { audioLevel, isListening, startListening, stopListening };
+  return { audioLevel, isListening, permissionState, startListening, stopListening };
 }
