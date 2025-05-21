@@ -1,6 +1,6 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 
 interface AudioLevelHook {
   audioLevel: number;
@@ -22,9 +22,10 @@ export function useAudioLevel(): AudioLevelHook {
   const microphoneRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const oscillatorRef = useRef<OscillatorNode | null>(null);
   
   // Higher sensitivity for elementary classroom settings
-  const sensitivityMultiplier = 400; // Increased from 300
+  const sensitivityMultiplier = 500; // Increased from 400 to be more sensitive
   
   // Check microphone permission status on mount
   useEffect(() => {
@@ -52,6 +53,39 @@ export function useAudioLevel(): AudioLevelHook {
     checkPermission();
   }, []);
 
+  // Function to create a silent test tone to unlock audio context
+  const createTestTone = useCallback((audioContext: AudioContext) => {
+    try {
+      if (oscillatorRef.current) return;
+
+      // Create a silent oscillator (test tone)
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      // Set it to be silent
+      gainNode.gain.value = 0.001; // Nearly silent
+      
+      oscillator.type = 'sine';
+      oscillator.frequency.value = 440; // A4 note
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      // Start and stop after a short time
+      oscillator.start();
+      setTimeout(() => {
+        oscillator.stop();
+        oscillator.disconnect();
+        gainNode.disconnect();
+        oscillatorRef.current = null;
+      }, 300);
+      
+      oscillatorRef.current = oscillator;
+      console.log("Test tone created to unlock audio context");
+    } catch (error) {
+      console.error("Error creating test tone:", error);
+    }
+  }, []);
+
   // Function to handle starting the audio monitoring
   const startListening = useCallback(async () => {
     try {
@@ -68,9 +102,11 @@ export function useAudioLevel(): AudioLevelHook {
         return;
       }
       
-      // Create or resume audio context 
+      // Create audio context only now in response to user interaction
       if (!audioContextRef.current) {
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+        // Play a silent sound to unlock the audio context
+        createTestTone(audioContextRef.current);
       }
       
       if (audioContextRef.current.state === 'suspended') {
@@ -82,12 +118,12 @@ export function useAudioLevel(): AudioLevelHook {
       // Explicitly request microphone with a user gesture
       console.log("Requesting microphone access...");
       
-      // CRITICAL FIX: Ensure we're actually getting the microphone stream
+      // Improved constraints for better audio detection
       const constraints = { 
         audio: {
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false,
+          echoCancellation: true, // Enable echo cancellation for classroom environments
+          noiseSuppression: true, // Enable noise suppression
+          autoGainControl: true, // Enable auto gain
         }
       };
       
@@ -114,9 +150,9 @@ export function useAudioLevel(): AudioLevelHook {
       const source = context.createMediaStreamSource(stream);
       const audioAnalyser = context.createAnalyser();
       
-      // Configure analyzer - key to fixing the detection issue
-      audioAnalyser.fftSize = 1024; // More frequency resolution
-      audioAnalyser.smoothingTimeConstant = 0.2; // Less smoothing for better responsiveness
+      // Configure analyzer - improved settings
+      audioAnalyser.fftSize = 2048; // More frequency resolution
+      audioAnalyser.smoothingTimeConstant = 0.1; // Less smoothing for better responsiveness
       audioAnalyser.minDecibels = -90;
       audioAnalyser.maxDecibels = -10;
       
@@ -128,16 +164,16 @@ export function useAudioLevel(): AudioLevelHook {
       microphoneRef.current = source;
       setIsListening(true);
       
-      // Prepare data arrays - critical fix: use correct sizes
+      // Prepare data arrays
       const timeDomainData = new Uint8Array(audioAnalyser.fftSize);
       const frequencyData = new Uint8Array(audioAnalyser.frequencyBinCount);
       
       console.log("Audio processing configured, beginning monitoring loop");
       
-      // MAIN FIX: Completely rewritten audio level calculation function
+      // IMPROVED audio level calculation function
       const updateAudioLevel = () => {
-        if (!analyserRef.current) {
-          console.log("No analyzer found in update loop");
+        if (!analyserRef.current || !audioContextRef.current) {
+          console.log("No analyzer or audio context found in update loop");
           return;
         }
         
@@ -148,7 +184,6 @@ export function useAudioLevel(): AudioLevelHook {
           // Get frequency data
           analyserRef.current.getByteFrequencyData(frequencyData);
           
-          // CRITICAL FIX: Better volume calculation method
           // Calculate RMS (Root Mean Square) for better volume representation
           let sumSquares = 0;
           for (let i = 0; i < timeDomainData.length; i++) {
@@ -159,10 +194,10 @@ export function useAudioLevel(): AudioLevelHook {
           
           const rms = Math.sqrt(sumSquares / timeDomainData.length);
           
-          // Calculate weighted frequency average, focusing on speech frequencies
+          // Calculate weighted frequency average, focusing on classroom sounds
           let totalEnergy = 0;
           let weightedSum = 0;
-          const nyquist = audioContextRef.current!.sampleRate / 2;
+          const nyquist = audioContextRef.current.sampleRate / 2;
           
           for (let i = 0; i < frequencyData.length; i++) {
             // Calculate the actual frequency this bin represents
@@ -171,7 +206,7 @@ export function useAudioLevel(): AudioLevelHook {
             // Weight frequencies in human voice range (300Hz-3000Hz) more heavily
             let weight = 1.0;
             if (frequency > 300 && frequency < 3000) {
-              weight = 2.0; // Double importance of speech frequencies
+              weight = 2.5; // Increased importance of speech frequencies
             }
             
             weightedSum += frequencyData[i] * weight;
@@ -183,31 +218,34 @@ export function useAudioLevel(): AudioLevelHook {
           // Find peak values
           const maxFrequency = Math.max(...Array.from(frequencyData));
           
-          // Combined volume metric:
-          // - RMS provides overall volume level
-          // - Frequency average captures spectral content
-          // - Peak frequency catches short bursts of sound
-          const combinedVolume = (rms * 0.6) + (freqAverage * 0.3) + (maxFrequency * 0.1);
+          // Enhanced combined volume metric with more weight on frequencies:
+          const combinedVolume = (rms * 0.4) + (freqAverage * 0.5) + (maxFrequency * 0.1);
           
           // Apply sensitivity multiplier and normalize to 0-100 range
           const normalizedVolume = Math.min(100, Math.max(0, combinedVolume * (sensitivityMultiplier / 128)));
           
+          // More aggressive noise floor handling
+          // If very quiet sounds are detected, boost them slightly
+          const finalVolume = normalizedVolume < 5 && normalizedVolume > 0 
+            ? normalizedVolume * 1.5 // Boost quiet sounds
+            : normalizedVolume;
+          
           // Log values periodically (not every frame to avoid console spam)
-          if (Math.random() < 0.05) {
+          if (Math.random() < 0.01) {
             console.log("Audio metrics:", {
               rms: rms.toFixed(2),
               freqAvg: freqAverage.toFixed(2),
               maxFreq: maxFrequency,
               combined: combinedVolume.toFixed(2),
-              level: normalizedVolume.toFixed(2)
+              level: finalVolume.toFixed(2)
             });
             
             // Debug raw audio data
-            console.log("Time domain samples (first few):", Array.from(timeDomainData.slice(0, 5)));
-            console.log("Frequency samples (first few):", Array.from(frequencyData.slice(0, 5)));
+            console.log("Time domain non-zero:", timeDomainData.some(v => v !== 128));
+            console.log("Frequency non-zero:", frequencyData.some(v => v > 0));
           }
           
-          setAudioLevel(normalizedVolume);
+          setAudioLevel(finalVolume);
         } catch (error) {
           console.error("Error in audio processing:", error);
         }
@@ -237,7 +275,7 @@ export function useAudioLevel(): AudioLevelHook {
         variant: "destructive",
       });
     }
-  }, [isListening, toast, sensitivityMultiplier]);
+  }, [isListening, toast, sensitivityMultiplier, createTestTone]);
 
   // Function to stop listening
   const stopListening = useCallback(() => {
@@ -251,23 +289,35 @@ export function useAudioLevel(): AudioLevelHook {
     
     // Disconnect audio processing
     if (microphoneRef.current) {
-      microphoneRef.current.disconnect();
+      try {
+        microphoneRef.current.disconnect();
+      } catch (error) {
+        console.error("Error disconnecting microphone:", error);
+      }
     }
     
     // Stop all tracks in the stream
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => {
-        track.stop();
-        console.log("Audio track stopped");
-      });
-      streamRef.current = null;
+      try {
+        streamRef.current.getTracks().forEach(track => {
+          track.stop();
+          console.log("Audio track stopped");
+        });
+        streamRef.current = null;
+      } catch (error) {
+        console.error("Error stopping stream tracks:", error);
+      }
     }
     
     // Suspend audio context
     if (audioContextRef.current) {
-      audioContextRef.current.suspend().then(() => {
-        console.log("AudioContext suspended");
-      });
+      try {
+        audioContextRef.current.suspend().then(() => {
+          console.log("AudioContext suspended");
+        });
+      } catch (error) {
+        console.error("Error suspending audio context:", error);
+      }
     }
     
     // Clear references

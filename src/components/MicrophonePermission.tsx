@@ -1,8 +1,8 @@
 
 import { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
-import { Mic, MicOff, AlertCircle } from "lucide-react";
-import { useToast } from "@/components/ui/use-toast";
+import { Mic, MicOff, AlertCircle, AudioLines } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 interface MicrophonePermissionProps {
   permissionState: "prompt" | "granted" | "denied" | "unknown";
@@ -19,6 +19,7 @@ const MicrophonePermission: React.FC<MicrophonePermissionProps> = ({
 }) => {
   const { toast } = useToast();
   const [showHelp, setShowHelp] = useState(false);
+  const [checkingMicrophone, setCheckingMicrophone] = useState(false);
   
   // Show help instructions if permission is denied
   useEffect(() => {
@@ -26,27 +27,72 @@ const MicrophonePermission: React.FC<MicrophonePermissionProps> = ({
       setShowHelp(true);
     } else if (permissionState === "granted" && isListening) {
       // For troubleshooting: when permission is granted but we're still not getting audio
-      console.log("Microphone permission is granted and we are listening. Check updateAudioLevel function.");
+      console.log("Microphone permission is granted and we are listening. Checking for audio.");
+      
+      // Set a timer to display troubleshooting advice if no audio is detected
+      const timer = setTimeout(() => {
+        setCheckingMicrophone(true);
+      }, 3000);
+      
+      return () => clearTimeout(timer);
     }
   }, [permissionState, isListening]);
   
   const handleStart = () => {
     console.log("Start listening button clicked. Current permission state:", permissionState);
+    setCheckingMicrophone(false);
     
-    // If permission hasn't been decided yet, show a helpful toast
-    if (permissionState === "prompt" || permissionState === "unknown") {
-      toast({
-        title: "Microphone Access Needed",
-        description: "Please click 'Allow' when your browser asks for microphone access.",
-      });
-    }
+    // Show a friendly toast for elementary classrooms
+    toast({
+      title: "Let's listen to our classroom! 🎧",
+      description: "Please allow microphone access if asked.",
+    });
     
     onStartListening();
   };
   
   const handleStop = () => {
+    setCheckingMicrophone(false);
     onStopListening();
   };
+  
+  // Special troubleshooting component when we have permission but no audio
+  if (permissionState === "granted" && isListening && checkingMicrophone) {
+    return (
+      <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-4 text-center space-y-3 max-w-md mx-auto">
+        <div className="flex justify-center">
+          <AudioLines className="text-blue-500 w-10 h-10 animate-pulse" />
+        </div>
+        <h3 className="text-lg font-semibold text-blue-700">Listening for Sounds...</h3>
+        <p className="text-sm text-blue-800">
+          We're having trouble hearing your classroom. Try these tips:
+        </p>
+        <ol className="text-left text-sm space-y-2 text-blue-800 list-decimal pl-5">
+          <li>Make some loud sounds near your device</li>
+          <li>Check that your microphone isn't muted on your device</li>
+          <li>Try a different browser (Chrome works best!)</li>
+          <li>Stop and restart the listening</li>
+        </ol>
+        <div className="pt-2">
+          <Button 
+            onClick={handleStop}
+            variant="destructive"
+            className="mr-2"
+          >
+            <MicOff className="mr-1 h-4 w-4" />
+            Stop
+          </Button>
+          <Button 
+            onClick={handleStart} 
+            className="bg-green-500 hover:bg-green-600"
+          >
+            <Mic className="mr-1 h-4 w-4" />
+            Restart
+          </Button>
+        </div>
+      </div>
+    );
+  }
   
   // If permission was denied, show helpful instructions
   if (permissionState === "denied" && showHelp) {
@@ -84,7 +130,7 @@ const MicrophonePermission: React.FC<MicrophonePermissionProps> = ({
     );
   }
   
-  // Extra debug info for when we have permission but no audio is detected
+  // When actively listening
   if (permissionState === "granted" && isListening) {
     return (
       <div className="space-y-4">
@@ -105,6 +151,7 @@ const MicrophonePermission: React.FC<MicrophonePermissionProps> = ({
     );
   }
   
+  // Default start button with fun design for elementary classrooms
   return (
     <Button 
       onClick={handleStart} 
