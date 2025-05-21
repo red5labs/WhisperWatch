@@ -2,7 +2,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useToast } from "@/components/ui/use-toast";
 
-// Define the return type for our hook
 interface AudioLevelHook {
   audioLevel: number;
   isListening: boolean;
@@ -22,19 +21,19 @@ export function useAudioLevel(): AudioLevelHook {
   const streamRef = useRef<MediaStream | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   
-  // Increased sensitivity significantly
-  const sensitivityMultiplier = 50; 
+  // Drastically increased sensitivity - elementary classrooms need high sensitivity
+  const sensitivityMultiplier = 200; 
 
   // Function to handle starting the audio monitoring
   const startListening = useCallback(async () => {
     try {
-      console.log("Starting audio monitoring...");
+      console.log("Starting audio monitoring with enhanced sensitivity...");
       
       if (!navigator.mediaDevices) {
         console.error("Media devices not supported in this browser.");
         toast({
-          title: "Error",
-          description: "Media devices not supported in this browser.",
+          title: "Oops! Can't access microphone",
+          description: "This browser doesn't support microphone access.",
           variant: "destructive",
         });
         return;
@@ -46,13 +45,13 @@ export function useAudioLevel(): AudioLevelHook {
         console.log("AudioContext created:", audioContextRef.current.state);
       }
       
-      // Resume audio context if it's suspended (needed for some browsers)
+      // Resume audio context if it's suspended
       if (audioContextRef.current.state === 'suspended') {
         await audioContextRef.current.resume();
         console.log("AudioContext resumed");
       }
       
-      // Request microphone access - with minimal constraints
+      // Request microphone access with minimal constraints for maximum compatibility
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
           echoCancellation: false,
@@ -64,13 +63,15 @@ export function useAudioLevel(): AudioLevelHook {
       streamRef.current = stream;
       console.log("Microphone access granted, tracks:", stream.getAudioTracks().length);
       console.log("Audio track settings:", stream.getAudioTracks()[0].getSettings());
+      console.log("Audio track constraints:", stream.getAudioTracks()[0].getConstraints());
       
       const context = audioContextRef.current;
       const source = context.createMediaStreamSource(stream);
       const audioAnalyser = context.createAnalyser();
       
-      // Smaller FFT size for faster updates
+      // Use smaller FFT size for faster updates
       audioAnalyser.fftSize = 256; 
+      audioAnalyser.smoothingTimeConstant = 0.2; // Less smoothing for more responsive readings
       
       source.connect(audioAnalyser);
       
@@ -78,8 +79,11 @@ export function useAudioLevel(): AudioLevelHook {
       microphoneRef.current = source;
       setIsListening(true);
       
-      // Prepare data array for time domain data (waveform)
+      // Prepare time domain data array (waveform)
       const dataArray = new Uint8Array(audioAnalyser.fftSize);
+      
+      // Prepare frequency data array
+      const frequencyData = new Uint8Array(audioAnalyser.frequencyBinCount);
       
       console.log("Audio processing configured, beginning monitoring loop");
       
@@ -90,34 +94,45 @@ export function useAudioLevel(): AudioLevelHook {
           return;
         }
         
-        // Get time-domain data
+        // Get time-domain data (waveform)
         analyserRef.current.getByteTimeDomainData(dataArray);
         
-        // Calculate volume using RMS (Root Mean Square)
-        let sum = 0;
-        for (let i = 0; i < dataArray.length; i++) {
-          // For time domain data, we measure deviation from the center value (128)
-          const deviation = dataArray[i] - 128;
-          sum += deviation * deviation;
-        }
+        // Also get frequency data for better detection
+        analyserRef.current.getByteFrequencyData(frequencyData);
         
-        // Calculate RMS value
-        const volume = Math.sqrt(sum / dataArray.length);
+        // Calculate RMS volume from time domain data
+        let sumSquares = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          // Convert 0-255 value to -128 to 127 range
+          const amplitude = dataArray[i] - 128;
+          sumSquares += amplitude * amplitude;
+        }
+        const rmsVolume = Math.sqrt(sumSquares / dataArray.length);
+        
+        // Calculate average frequency energy
+        const avgFrequency = frequencyData.reduce((sum, value) => sum + value, 0) / frequencyData.length;
+        
+        // Combine both metrics with weighted average - frequency data helps catch vocals better
+        const combinedVolume = (rmsVolume * 0.7) + (avgFrequency * 0.3);
         
         // Apply sensitivity multiplier and clamp to 0-100 range
-        const adjustedVolume = Math.min(100, Math.max(0, volume * sensitivityMultiplier));
+        const adjustedVolume = Math.min(100, Math.max(0, combinedVolume * sensitivityMultiplier));
         
         // Log samples periodically for debugging
         if (Math.random() < 0.01) {
-          console.log("Raw volume:", volume.toFixed(2), "Adjusted:", adjustedVolume.toFixed(2));
-          console.log("Sample values (first 10):", Array.from(dataArray.slice(0, 10)));
-          console.log("Sample statistics - Min:", Math.min(...Array.from(dataArray)), 
-                      "Max:", Math.max(...Array.from(dataArray)), 
-                      "Mean:", dataArray.reduce((a, b) => a + b, 0) / dataArray.length);
+          console.log("Raw RMS:", rmsVolume.toFixed(2), 
+                      "Freq avg:", avgFrequency.toFixed(2), 
+                      "Combined:", combinedVolume.toFixed(2), 
+                      "Adjusted:", adjustedVolume.toFixed(2));
+                      
+          console.log("Sample time values (first 10):", Array.from(dataArray.slice(0, 10)));
+          console.log("Sample frequency values (first 10):", Array.from(frequencyData.slice(0, 10)));
+          
+          // Detailed audio stats
+          console.log("Audio stats - Min frequency:", Math.min(...Array.from(frequencyData)), 
+                      "Max frequency:", Math.max(...Array.from(frequencyData)), 
+                      "Silent?", Math.max(...Array.from(frequencyData)) < 5);
         }
-        
-        // Log every update for debugging
-        console.log(`Audio level: ${adjustedVolume.toFixed(2)}`);
         
         setAudioLevel(adjustedVolume);
         
@@ -131,14 +146,14 @@ export function useAudioLevel(): AudioLevelHook {
       animationFrameRef.current = requestAnimationFrame(updateAudioLevel);
       
       toast({
-        title: "Microphone Access Granted",
-        description: "Now monitoring classroom noise levels."
+        title: "Microphone is listening!",
+        description: "Now watching classroom noise levels.",
       });
       
     } catch (error) {
       console.error("Error accessing microphone:", error);
       toast({
-        title: "Permission Denied",
+        title: "Need microphone access",
         description: "Please allow microphone access to use the noise monitor.",
         variant: "destructive",
       });

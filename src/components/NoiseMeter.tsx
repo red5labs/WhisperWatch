@@ -50,21 +50,46 @@ const NoiseMeter: React.FC<NoiseMeterProps> = ({ level, thresholds }) => {
     return 'bg-green-500';
   };
 
-  // Get appropriate icon with enhanced visual feedback
-  const getNoiseIcon = () => {
+  // Get appropriate character with enhanced visual feedback
+  const getNoiseCharacter = () => {
     if (level >= thresholds.excessive) {
-      return <Volume2 className="text-red-500 animate-pulse h-12 w-12" />;
+      return (
+        <div className="animate-bounce">
+          <div className="text-5xl mb-2">🙉</div>
+          <div className="text-red-500 font-bold">Too Loud!</div>
+        </div>
+      );
     }
     if (level >= thresholds.loud) {
-      return <Volume2 className="text-orange-500 h-12 w-12" />;
+      return (
+        <div className="animate-pulse">
+          <div className="text-5xl mb-2">😲</div>
+          <div className="text-orange-500 font-bold">Very Noisy</div>
+        </div>
+      );
     }
     if (level >= thresholds.moderate) {
-      return <Volume1 className="text-yellow-500 h-12 w-12" />;
+      return (
+        <div>
+          <div className="text-5xl mb-2">🙂</div>
+          <div className="text-yellow-500 font-bold">Moderate</div>
+        </div>
+      );
     }
     if (level > 5) {
-      return <Volume className="text-green-600 h-12 w-12" />;
+      return (
+        <div>
+          <div className="text-5xl mb-2">😊</div>
+          <div className="text-green-600 font-bold">Quiet</div>
+        </div>
+      );
     }
-    return <VolumeX className="text-gray-400 h-12 w-12" />;
+    return (
+      <div>
+        <div className="text-5xl mb-2">😴</div>
+        <div className="text-gray-400 font-bold">Silent</div>
+      </div>
+    );
   };
 
   // Get label for noise level
@@ -82,27 +107,57 @@ const NoiseMeter: React.FC<NoiseMeterProps> = ({ level, thresholds }) => {
     return `${Math.max(0, Math.min(100, animatedLevel))}%`;
   };
 
+  // Function to render sound wave indicators based on noise level
+  const renderSoundWaves = () => {
+    if (level < 5) return null;
+    
+    const waveCount = Math.floor(level / 20) + 1;
+    const waves = [];
+    
+    for (let i = 0; i < waveCount; i++) {
+      waves.push(
+        <div 
+          key={i}
+          className={cn(
+            "absolute rounded-full animate-ping opacity-70",
+            level >= thresholds.excessive ? "bg-red-300" : 
+            level >= thresholds.loud ? "bg-orange-300" :
+            level >= thresholds.moderate ? "bg-yellow-300" : "bg-green-300"
+          )}
+          style={{
+            width: `${60 + i * 20}px`,
+            height: `${60 + i * 20}px`,
+            animationDelay: `${i * 0.2}s`,
+            animationDuration: '1s',
+            left: `calc(50% - ${30 + i * 10}px)`,
+            top: `calc(50% - ${30 + i * 10}px)`
+          }}
+        />
+      );
+    }
+    
+    return waves;
+  };
+
   return (
-    <div className="w-full max-w-md mx-auto">
-      <div className="flex items-center justify-between mb-2">
-        <h2 className="text-xl font-bold">Noise Level</h2>
-        <div className="flex items-center">
-          {getNoiseIcon()}
-          <span className={cn(
-            "ml-2 font-semibold text-lg",
-            level >= thresholds.excessive && "text-red-500",
-            level >= thresholds.loud && level < thresholds.excessive && "text-orange-500",
-            level >= thresholds.moderate && level < thresholds.loud && "text-yellow-500",
-            level > 5 && level < thresholds.moderate && "text-green-600",
-            level <= 5 && "text-gray-400"
-          )}>
-            {getNoiseLabel()} {Math.round(level)}
-          </span>
+    <div className="w-full max-w-md mx-auto bg-white rounded-xl border-4 border-blue-200 p-6 shadow-lg">
+      {/* Character display with sound waves */}
+      <div className="relative flex justify-center items-center h-40 mb-6">
+        {renderSoundWaves()}
+        <div className="z-10">
+          {getNoiseCharacter()}
         </div>
       </div>
+      
+      <h2 className="text-2xl font-bold text-center mb-6 text-blue-600">Class Noise Level</h2>
 
-      {/* Meter background */}
-      <div className="h-8 bg-gray-200 rounded-full overflow-hidden shadow-inner">
+      {/* Meter background - styled as a fun ruler */}
+      <div className="h-10 bg-gradient-to-r from-blue-100 to-purple-100 rounded-full overflow-hidden shadow-inner border-2 border-blue-300 relative">
+        {/* Decorative ruler marks */}
+        <div className="absolute top-0 left-1/4 h-3 w-1 bg-blue-400"></div>
+        <div className="absolute top-0 left-1/2 h-3 w-1 bg-blue-400"></div>
+        <div className="absolute top-0 left-3/4 h-3 w-1 bg-blue-400"></div>
+        
         {/* Meter fill */}
         <div
           className={cn(
@@ -113,33 +168,58 @@ const NoiseMeter: React.FC<NoiseMeterProps> = ({ level, thresholds }) => {
         ></div>
       </div>
 
-      {/* Visual indicator dots */}
-      <div className="relative h-1 mt-1">
-        <div className="absolute left-1/4 bottom-0 w-1 h-1 bg-yellow-400 rounded-full"></div>
-        <div className="absolute left-1/2 bottom-0 w-1 h-1 bg-orange-500 rounded-full"></div>
-        <div className="absolute left-3/4 bottom-0 w-1 h-1 bg-red-500 rounded-full"></div>
-      </div>
-
-      {/* Level markers */}
-      <div className="relative h-6">
-        <div className="absolute top-0 left-0 text-xs text-gray-600">0</div>
-        <div className="absolute top-0 left-1/4 text-xs text-gray-600 -ml-2">{Math.round(thresholds.moderate / 2)}</div>
-        <div className="absolute top-0 left-1/2 text-xs text-gray-600 -ml-2">{thresholds.moderate}</div>
-        <div className="absolute top-0 left-3/4 text-xs text-gray-600 -ml-2">{thresholds.loud}</div>
-        <div className="absolute top-0 right-0 text-xs text-gray-600">100</div>
+      {/* Level indicators with kid-friendly labels */}
+      <div className="flex justify-between mt-2 text-xs">
+        <div className="flex flex-col items-center">
+          <span className="text-green-600 font-bold">Whisper</span>
+          <span>😊</span>
+        </div>
+        <div className="flex flex-col items-center">
+          <span className="text-yellow-500 font-bold">Normal</span>
+          <span>🙂</span>
+        </div>
+        <div className="flex flex-col items-center">
+          <span className="text-orange-500 font-bold">Noisy</span>
+          <span>😲</span>
+        </div>
+        <div className="flex flex-col items-center">
+          <span className="text-red-500 font-bold">Too Loud</span>
+          <span>🙉</span>
+        </div>
       </div>
 
       {/* Current level display */}
-      <div className="text-center mt-2">
-        <span className="text-2xl font-bold">{Math.round(level)}</span>
-        <span className="text-gray-500 ml-1">/ 100</span>
+      <div className="text-center mt-6 bg-blue-50 py-3 px-4 rounded-lg border-2 border-blue-200">
+        <div className="text-sm text-blue-700 mb-1">Current Noise Level:</div>
+        <div className="flex items-center justify-center">
+          <span className={cn(
+            "text-3xl font-bold mr-1",
+            level >= thresholds.excessive && "text-red-500",
+            level >= thresholds.loud && level < thresholds.excessive && "text-orange-500",
+            level >= thresholds.moderate && level < thresholds.loud && "text-yellow-500",
+            level > 5 && level < thresholds.moderate && "text-green-600",
+            level <= 5 && "text-gray-400"
+          )}>
+            {Math.round(level)}
+          </span>
+          <span className="text-gray-500">/100</span>
+        </div>
       </div>
 
-      {/* Debug info */}
-      <div className="mt-4 p-2 bg-gray-100 rounded text-sm">
-        <p>Debug: Raw Level = {level.toFixed(2)}</p>
-        <p>Animated Level = {animatedLevel.toFixed(2)}</p>
-        <p>Microphone Status: {level > 0 ? "Active" : "Silent or Issue Detected"}</p>
+      {/* Microphone status indicator */}
+      <div className="mt-4 p-2 bg-gray-50 rounded-lg border border-gray-200 text-sm">
+        <div className="flex items-center justify-center">
+          <div 
+            className={cn(
+              "w-3 h-3 rounded-full mr-2",
+              level > 0 ? "bg-green-500" : "bg-red-500"
+            )}
+          ></div>
+          <p>Microphone: {level > 0 ? "Working" : "Not detecting sound"}</p>
+        </div>
+        <p className="mt-1 text-xs text-center text-gray-500">
+          {level > 0 ? "Microphone is detecting sounds" : "Make some noise or check microphone permissions"}
+        </p>
       </div>
     </div>
   );

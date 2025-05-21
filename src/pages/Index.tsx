@@ -25,16 +25,16 @@ const Index = () => {
   const handleStartMonitoring = () => {
     startListening();
     toast({
-      title: "Monitoring Started",
-      description: "Now tracking classroom noise levels.",
+      title: "We're listening!",
+      description: "Now tracking classroom noise.",
     });
   };
 
   const handleStopMonitoring = () => {
     stopListening();
     toast({
-      title: "Monitoring Stopped",
-      description: "Noise tracking has been paused.",
+      title: "Monitoring paused",
+      description: "The noise meter is taking a break!",
     });
   };
 
@@ -48,32 +48,36 @@ const Index = () => {
   const resetThresholds = () => {
     setThresholds({ ...DEFAULT_THRESHOLDS });
     toast({
-      title: "Thresholds Reset",
-      description: "Noise thresholds have been reset to default values.",
+      title: "Settings reset",
+      description: "Noise levels set back to normal.",
     });
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6">
+    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-purple-50 py-8 px-4 sm:px-6">
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 sm:text-4xl">Classroom Noise Monitor</h1>
-          <p className="mt-2 text-lg text-gray-600">Track and manage your classroom noise levels easily</p>
+          <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600 sm:text-4xl">
+            Classroom Noise Monitor
+          </h1>
+          <p className="mt-2 text-lg text-gray-600">
+            Help your students learn when to use their inside voices! 🤫
+          </p>
         </div>
 
         {/* Main Content */}
         <div className="grid gap-6 md:grid-cols-3">
           {/* Noise Meter Column */}
           <div className="md:col-span-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>Noise Monitor</CardTitle>
-                <CardDescription>
-                  Real-time classroom noise level tracking
+            <Card className="border-4 border-blue-200 shadow-lg overflow-hidden">
+              <CardHeader className="bg-gradient-to-r from-blue-100 to-purple-100">
+                <CardTitle className="text-center text-blue-700">Noise Monitor</CardTitle>
+                <CardDescription className="text-center">
+                  Watch the noise level in your classroom
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6">
+              <CardContent className="space-y-6 pt-6">
                 {/* Noise Meter */}
                 <NoiseMeter level={audioLevel} thresholds={thresholds} />
 
@@ -82,28 +86,29 @@ const Index = () => {
                   {!isListening ? (
                     <Button 
                       onClick={handleStartMonitoring} 
-                      className="bg-green-500 hover:bg-green-600"
+                      className="bg-green-500 hover:bg-green-600 rounded-full text-lg px-8 py-6 h-auto transform hover:scale-105 transition-transform shadow-md"
                       size="lg"
                     >
                       <Mic className="mr-2 h-5 w-5" />
-                      Start Monitoring
+                      Start Listening
                     </Button>
                   ) : (
                     <Button 
                       onClick={handleStopMonitoring} 
                       variant="destructive"
+                      className="rounded-full text-lg px-8 py-6 h-auto transform hover:scale-105 transition-transform shadow-md"
                       size="lg"
                     >
                       <MicOff className="mr-2 h-5 w-5" />
-                      Stop Monitoring
+                      Stop Listening
                     </Button>
                   )}
                 </div>
               </CardContent>
-              <CardFooter className="text-sm text-gray-500 justify-center">
+              <CardFooter className="text-sm text-gray-500 justify-center bg-blue-50 p-4">
                 {isListening 
-                  ? "Monitoring active - adjusting noise levels in real-time" 
-                  : "Click 'Start Monitoring' to begin tracking noise levels"}
+                  ? "Listening to classroom noise - make some sound to test!" 
+                  : "Click 'Start Listening' to begin watching noise levels"}
               </CardFooter>
             </Card>
           </div>
@@ -111,19 +116,33 @@ const Index = () => {
           {/* Settings Column */}
           <div>
             <Tabs defaultValue="timer" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="timer">Timer</TabsTrigger>
-                <TabsTrigger value="settings">Settings</TabsTrigger>
+              <TabsList className="grid w-full grid-cols-2 rounded-full bg-blue-100">
+                <TabsTrigger value="timer" className="rounded-full data-[state=active]:bg-blue-500">Timer</TabsTrigger>
+                <TabsTrigger value="settings" className="rounded-full data-[state=active]:bg-blue-500">Settings</TabsTrigger>
               </TabsList>
               <TabsContent value="timer" className="mt-4">
-                <Timer />
+                <Card className="border-blue-200 border-2">
+                  <CardHeader className="bg-blue-50">
+                    <CardTitle className="text-center text-blue-700">Class Timer</CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-4">
+                    <Timer />
+                  </CardContent>
+                </Card>
               </TabsContent>
               <TabsContent value="settings" className="mt-4">
-                <ThresholdControls 
-                  thresholds={thresholds}
-                  onChange={handleThresholdChange}
-                  onReset={resetThresholds}
-                />
+                <Card className="border-blue-200 border-2">
+                  <CardHeader className="bg-blue-50">
+                    <CardTitle className="text-center text-blue-700">Noise Settings</CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-4">
+                    <ThresholdControls 
+                      thresholds={thresholds}
+                      onChange={handleThresholdChange}
+                      onReset={resetThresholds}
+                    />
+                  </CardContent>
+                </Card>
               </TabsContent>
             </Tabs>
           </div>
@@ -131,33 +150,45 @@ const Index = () => {
 
         {/* Tips Section */}
         <div className="mt-8">
-          <h2 className="text-xl font-semibold mb-4">Tips for Using the Noise Monitor</h2>
+          <h2 className="text-xl font-semibold mb-4 text-blue-700">Teacher Tips</h2>
           <div className="grid gap-4 md:grid-cols-3">
-            <Card>
+            <Card className="border-2 border-blue-200 bg-blue-50 hover:shadow-md transition-shadow">
               <CardHeader>
-                <CardTitle className="text-lg">Getting Started</CardTitle>
+                <CardTitle className="text-lg flex items-center">
+                  <span className="text-2xl mr-2">🎯</span> Getting Started
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <p>Allow microphone access when prompted and click "Start Monitoring" to begin tracking noise levels.</p>
+                <p>Click "Start Listening" and allow microphone access. The noise meter will show your classroom's noise level.</p>
               </CardContent>
             </Card>
-            <Card>
+            <Card className="border-2 border-blue-200 bg-purple-50 hover:shadow-md transition-shadow">
               <CardHeader>
-                <CardTitle className="text-lg">Customizing Thresholds</CardTitle>
+                <CardTitle className="text-lg flex items-center">
+                  <span className="text-2xl mr-2">🔍</span> Adjusting Settings
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <p>Adjust the noise thresholds in Settings to match your classroom's normal noise environment.</p>
+                <p>Change the noise thresholds to match what works best for your classroom activities.</p>
               </CardContent>
             </Card>
-            <Card>
+            <Card className="border-2 border-blue-200 bg-green-50 hover:shadow-md transition-shadow">
               <CardHeader>
-                <CardTitle className="text-lg">Using the Timer</CardTitle>
+                <CardTitle className="text-lg flex items-center">
+                  <span className="text-2xl mr-2">⏱️</span> Using the Timer
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <p>Set a timer for quiet activities or to help manage transitions between lessons.</p>
+                <p>Set a timer for quiet reading time, group activities, or transitions between subjects.</p>
               </CardContent>
             </Card>
           </div>
+        </div>
+
+        {/* Footer with teacher message */}
+        <div className="mt-10 text-center text-gray-600 text-sm">
+          <p>Made with ❤️ for amazing teachers and their students</p>
+          <p className="mt-1">Remember: A quiet classroom is a learning classroom!</p>
         </div>
       </div>
     </div>
