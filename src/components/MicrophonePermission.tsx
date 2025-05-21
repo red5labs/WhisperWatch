@@ -24,10 +24,23 @@ const MicrophonePermission: React.FC<MicrophonePermissionProps> = ({
   useEffect(() => {
     if (permissionState === "denied") {
       setShowHelp(true);
+    } else if (permissionState === "granted" && isListening) {
+      // For troubleshooting: when permission is granted but we're still not getting audio
+      console.log("Microphone permission is granted and we are listening. Check updateAudioLevel function.");
     }
-  }, [permissionState]);
+  }, [permissionState, isListening]);
   
   const handleStart = () => {
+    console.log("Start listening button clicked. Current permission state:", permissionState);
+    
+    // If permission hasn't been decided yet, show a helpful toast
+    if (permissionState === "prompt" || permissionState === "unknown") {
+      toast({
+        title: "Microphone Access Needed",
+        description: "Please click 'Allow' when your browser asks for microphone access.",
+      });
+    }
+    
     onStartListening();
   };
   
@@ -71,17 +84,24 @@ const MicrophonePermission: React.FC<MicrophonePermissionProps> = ({
     );
   }
   
-  if (isListening) {
+  // Extra debug info for when we have permission but no audio is detected
+  if (permissionState === "granted" && isListening) {
     return (
-      <Button 
-        onClick={handleStop} 
-        variant="destructive"
-        className="rounded-full text-lg px-8 py-6 h-auto transform hover:scale-105 transition-transform shadow-md"
-        size="lg"
-      >
-        <MicOff className="mr-2 h-5 w-5" />
-        Stop Listening
-      </Button>
+      <div className="space-y-4">
+        <Button 
+          onClick={handleStop} 
+          variant="destructive"
+          className="rounded-full text-lg px-8 py-6 h-auto transform hover:scale-105 transition-transform shadow-md"
+          size="lg"
+        >
+          <MicOff className="mr-2 h-5 w-5" />
+          Stop Listening
+        </Button>
+        
+        <div className="text-xs text-center text-gray-500 animate-pulse">
+          Listening with microphone... make some noise!
+        </div>
+      </div>
     );
   }
   
